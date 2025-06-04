@@ -1,13 +1,21 @@
 import axios from 'axios';
 
+// Determine the base URL based on the current environment
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const baseURL = isLocalhost 
+  ? 'http://localhost:3000/api' 
+  : window.location.origin + '/api';
+
 const api = axios.create({
-  baseURL: process.env.NODE_ENV === 'production' 
-    ? '/api' 
-    : 'http://localhost:3000/api',
+  baseURL: baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true
 });
+
+// Log the API configuration
+console.log('API Base URL:', baseURL);
 
 // Add a request interceptor to include the auth token
 api.interceptors.request.use(async (config) => {

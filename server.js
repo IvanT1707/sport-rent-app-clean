@@ -57,6 +57,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Parse JSON bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.use(bodyParser.json());
 
 // Helper function to convert Firestore timestamps to serializable format
@@ -354,6 +358,11 @@ app.post('/rentals', (req, res) => {
   res.redirect(307, '/api/rentals'); // 307 preserves the POST method
 });
 
+// API Routes must come before static files
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Serve static files from the dist directory
 app.use(express.static(path.join(__dirname, 'dist'), {
   setHeaders: (res, filePath) => {
@@ -361,13 +370,9 @@ app.use(express.static(path.join(__dirname, 'dist'), {
     if (filePath.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript');
     }
-  }
+  },
+  fallthrough: true
 }));
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 // Handle SPA routing - serve index.html for all other routes
 app.get('*', (req, res) => {
