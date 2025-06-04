@@ -131,6 +131,10 @@ const serializeDocumentData = (data) => {
 const apiRouter = express.Router();
 console.log('Initialized API router');
 
+// Mount the API router at /api
+app.use('/api', apiRouter);
+console.log('Mounted API router at /api');
+
 // Simple test endpoint
 apiRouter.get('/test', (req, res) => {
   console.log('Test endpoint called');
@@ -504,15 +508,7 @@ apiRouter.delete('/rentals/:id', async (req, res) => {
   }
 });
 
-// Redirect legacy routes to API routes
-app.get('/rentals', (req, res) => {
-  res.redirect('/api/rentals');
-});
-
-// POST /rentals - Redirect to API route
-app.post('/rentals', (req, res) => {
-  res.redirect(307, '/api/rentals'); // 307 preserves the POST method
-});
+// Legacy routes are now handled by the API router
 
 // Health check endpoint (legacy route - will be removed in future versions)
 app.get('/api/health', (req, res) => {
