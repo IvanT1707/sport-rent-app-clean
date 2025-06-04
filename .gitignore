@@ -28,8 +28,8 @@ yarn-error.log*
 .env.*
 !.env.example
 
-# Firebase service account key
-serviceAccountKey.json
+# Firebase service account key is now tracked in the repository
+# serviceAccountKey.json
 
 # Editor directories and files
 .idea/

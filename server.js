@@ -18,18 +18,27 @@ dotenv.config();
 // Initialize Firebase Admin
 let serviceAccount;
 
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  // Якщо змінна середовища є (наприклад, на Render)
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} else {
-  // Для локальної розробки
-  serviceAccount = JSON.parse(fs.readFileSync('./serviceAccountKey.json', 'utf-8'));
+try {
+  // Спершу пробуємо прочитати з файлу
+  serviceAccount = require('./serviceAccountKey.json');
+  console.log('Using service account from file');
+} catch (error) {
+  // Якщо файлу немає, перевіряємо змінні середовища
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    console.log('Using service account from environment variable');
+  } else {
+    console.error('FATAL: No Firebase service account found');
+    process.exit(1);
+  }
 }
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://sportrent-a81c9-default-rtdb.europe-west1.firebasedatabase.app'
 });
+
+console.log('Firebase Admin initialized successfully');
 
 const db = admin.firestore();
 const app = express();
