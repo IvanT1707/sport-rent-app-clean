@@ -1,21 +1,29 @@
 import axios from 'axios';
 
-// Determine the base URL based on the current environment
-const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const baseURL = isLocalhost 
-  ? 'http://localhost:3000/api' 
-  : window.location.origin + '/api';
+// Enhanced environment detection
+const getApiBaseUrl = () => {
+  // If we're in development or production, use relative URL (handled by Vite proxy in dev)
+  if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return '/api'; // This will be proxied by Vite in development
+  }
+  // In production, use the current origin
+  return window.location.origin + '/api';
+};
 
 const api = axios.create({
-  baseURL: baseURL,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest'
   },
-  withCredentials: true
+  withCredentials: true,
+  timeout: 10000 // 10 seconds timeout
 });
 
 // Log the API configuration
-console.log('API Base URL:', baseURL);
+console.log('Environment:', process.env.NODE_ENV || 'development');
+console.log('API Base URL:', api.defaults.baseURL);
+console.log('Current Origin:', window.location.origin);
 
 // Add a request interceptor to include the auth token
 api.interceptors.request.use(async (config) => {

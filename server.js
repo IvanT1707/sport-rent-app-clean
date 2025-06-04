@@ -43,7 +43,7 @@ console.log('Firebase Admin initialized successfully');
 const db = admin.firestore();
 const app = express();
 
-// Middleware
+// Apply CORS middleware first
 app.use(cors({
   origin: true, // Allow all origins in development
   credentials: true, // Allow credentials
@@ -54,10 +54,31 @@ app.use(cors({
 // Parse JSON bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 
 // Log all requests for debugging
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.originalUrl}`);
+  console.log(`\n=== New Request ===`);
+  console.log(`Time: ${new Date().toISOString()}`);
+  console.log(`Method: ${req.method} ${req.originalUrl}`);
+  console.log(`Headers:`, req.headers);
+  console.log(`Query:`, req.query);
+  console.log(`Body:`, req.body);
+  
+  // Capture the original send function
+  const originalSend = res.send;
+  
+  // Override the send function to log the response
+  res.send = function(body) {
+    console.log('Response:', {
+      statusCode: res.statusCode,
+      statusMessage: res.statusMessage,
+      headers: res.getHeaders(),
+      body: body
+    });
+    return originalSend.apply(this, arguments);
+  };
+  
   next();
 });
 
@@ -102,8 +123,10 @@ const serializeDocumentData = (data) => {
 };
 
 // API Routes
+console.log('Registering API routes...');
 
 // GET /api/equipment - Отримати всі обладнання
+console.log('Registering route: GET /api/equipment');
 app.get('/api/equipment', async (req, res) => {
   try {
     console.log('Fetching equipment from Firestore...');
@@ -367,7 +390,27 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Log all registered routes
+const printRoutes = (router) => {
+  router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      // Routes registered directly on the app
+      const methods = Object.keys(middleware.route.methods).join(', ').toUpperCase();
+      console.log(`Registered route: ${methods} ${middleware.route.path}`);
+    } else if (middleware.name === 'router') {
+      // Routes added as router
+      middleware.handle.stack.forEach(handler => {
+        if (handler.route) {
+          const methods = Object.keys(handler.route.methods).join(', ').toUpperCase();
+          console.log(`Registered route: ${methods} ${handler.route.path}`);
+        }
+      });
+    }
+  });
+};
+
 // Serve static files from the dist directory
+console.log('Setting up static file serving from:', path.join(__dirname, 'dist'));
 app.use(express.static(path.join(__dirname, 'dist'), {
   setHeaders: (res, filePath) => {
     // Set proper MIME type for JavaScript files
@@ -378,8 +421,14 @@ app.use(express.static(path.join(__dirname, 'dist'), {
   fallthrough: true
 }));
 
+// Print all registered routes
+console.log('\n=== Registered Routes ===');
+printRoutes(app);
+console.log('=========================\n');
+
 // Handle SPA routing - serve index.html for all other routes
 app.get('*', (req, res) => {
+  console.log(`Serving index.html for route: ${req.originalUrl}`);
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
@@ -389,11 +438,31 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Щось пішло не так!' });
 });
 
+// Verify dist directory exists
+const distPath = path.join(__dirname, 'dist');
+console.log('Checking dist directory at:', distPath);
+try {
+  const distExists = fs.existsSync(distPath);
+  const distContents = distExists ? fs.readdirSync(distPath) : [];
+  console.log(`Dist directory exists: ${distExists}`);
+  console.log(`Dist directory contents:`, distContents);
+} catch (err) {
+  console.error('Error checking dist directory:', err);
+}
+
 // Start the server
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
-  console.log(`Сервер запущено на порту ${PORT}`);
-  console.log(`Доступно за посиланням: http://localhost:${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n=== Server Started ===`);
+  console.log(`Server running on port: ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Node version: ${process.version}`);
+  console.log(`Platform: ${process.platform} ${process.arch}`);
+  console.log(`Memory usage: ${JSON.stringify(process.memoryUsage())}`);
+  console.log(`Current directory: ${__dirname}`);
+  console.log(`Server time: ${new Date().toISOString()}`);
+  console.log(`Access the app at: http://localhost:${PORT}`);
+  console.log('Waiting for requests...\n');
 });
 
 // Handle unhandled promise rejections
