@@ -1,4 +1,9 @@
 // server.js
+console.log('=== Starting server ===');
+console.log('Environment:', process.env.NODE_ENV || 'development');
+console.log('Current working directory:', process.cwd());
+console.log('__dirname:', __dirname);
+
 import express from 'express';
 import cors from 'cors';
 import admin from 'firebase-admin';
@@ -122,12 +127,34 @@ const serializeDocumentData = (data) => {
   return serialized;
 };
 
-// API Routes
-console.log('Registering API routes...');
+// API Router
+const apiRouter = express.Router();
+console.log('Initialized API router');
 
-// GET /api/equipment - Отримати всі обладнання
-console.log('Registering route: GET /api/equipment');
-app.get('/api/equipment', async (req, res) => {
+// Simple test endpoint
+apiRouter.get('/test', (req, res) => {
+  console.log('Test endpoint called');
+  res.json({ 
+    message: 'API is working!',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Health check endpoint
+apiRouter.get('/health', (req, res) => {
+  console.log('Health check endpoint called');
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    nodeVersion: process.version,
+    platform: process.platform
+  });
+});
+
+// GET /api/equipment - Get all equipment
+apiRouter.get('/equipment', async (req, res) => {
   try {
     console.log('Fetching equipment from Firestore...');
     const snapshot = await db.collection('equipment').get();
@@ -150,38 +177,40 @@ app.get('/api/equipment', async (req, res) => {
     console.log(`Returning ${equipment.length} equipment items`);
     res.json({ data: equipment });
   } catch (error) {
-    console.error('Помилка отримання обладнання:', error);
+    console.error('Error fetching equipment:', error);
     res.status(500).json({ 
-      error: 'Не вдалося отримати обладнання',
+      error: 'Failed to fetch equipment',
       details: error.message 
     });
   }
 });
 
-// GET /api/rentals - Отримати всі оренди (з авторизацією)
-app.get('/api/rentals', async (req, res) => {
+// GET /api/rentals - Get all rentals (with authentication)
+apiRouter.get('/rentals', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Необхідна авторизація' });
+      return res.status(401).json({ error: 'Unauthorized - No token provided' });
     }
-    
+
     const token = authHeader.split(' ')[1];
     let decodedToken;
     
     try {
       decodedToken = await admin.auth().verifyIdToken(token);
     } catch (error) {
-      console.error('Помилка перевірки токена:', error);
-      return res.status(401).json({ error: 'Недійсний токен' });
+      console.error('Error verifying token:', error);
+      return res.status(401).json({ error: 'Unauthorized - Invalid token' });
     }
     
     const userId = decodedToken.uid;
+    console.log(`Fetching rentals for user: ${userId}`);
     
-    // Отримати оренди для конкретного користувача
-    const snapshot = await db.collection('rentals').where('userId', '==', userId).get();
-    
+    const snapshot = await db.collection('rentals')
+      .where('userId', '==', userId)
+      .get();
+      
     const rentals = [];
     snapshot.forEach(doc => {
       const data = serializeDocumentData(doc.data());
@@ -191,25 +220,128 @@ app.get('/api/rentals', async (req, res) => {
       });
     });
     
-    console.log(`Returning ${rentals.length} rentals for user ${userId}`);
     res.json({ data: rentals });
   } catch (error) {
-    console.error('Помилка отримання оренд:', error);
+    console.error('Error fetching rentals:', error);
     res.status(500).json({ 
-      error: 'Не вдалося отримати оренди',
+      error: 'Failed to fetch rentals',
       details: error.message 
     });
   }
 });
 
-// POST /api/rentals - Створити нову оренду
-app.post('/api/rentals', async (req, res) => {
+// Add debug route to check server configuration
+app.get('/debug', (req, res) => {
+  const routes = [];
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      // Routes registered directly on the app
+      routes.push(`${Object.keys(middleware.route.methods).join(', ').toUpperCase()} ${middleware.route.path}`);
+    } else if (middleware.name === 'router') {
+      // Routes registered on a router
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          routes.push(`${Object.keys(handler.route.methods).join(', ').toUpperCase()} /api${handler.route.path}`);
+        }
+      });
+    }
+  });
+
+  res.json({
+    status: 'Server is running',
+    time: new Date().toISOString(),
+    nodeVersion: process.version,
+    environment: process.env.NODE_ENV || 'development',
+    port: process.env.PORT || 3000,
+    cwd: process.cwd(),
+    __dirname: __dirname,
+    routes: routes.sort(),
+    environmentVariables: Object.keys(process.env).filter(k => 
+      k.startsWith('NODE_') || 
+      k.startsWith('FIREBASE_') || 
+      k === 'PORT' || 
+      k === 'NODE_ENV'
+    ).reduce((obj, key) => {
+      obj[key] = process.env[key];
+      return obj;
+    }, {})
+  });
+});
+
+// Mount the API router at /api
+app.use('/api', apiRouter);
+console.log('Mounted API router at /api');
+
+// Redirect legacy routes to API routes
+app.get('/rentals', (req, res) => {
+  console.log('Legacy route /rentals called, redirecting to /api/rentals');
+  res.redirect('/api/rentals');
+});
+
+app.post('/rentals', (req, res) => {
+  console.log('Legacy POST /rentals called, redirecting to /api/rentals');
+  res.redirect(307, '/api/rentals');
+});
+
+// Add a test route to verify the server is working
+app.get('/api/test', (req, res) => {
+  console.log('Test endpoint called');
+  res.json({ message: 'Test endpoint is working!', timestamp: new Date().toISOString() });
+});
+
+// GET /api/rentals - Get all rentals (with authentication)
+apiRouter.get('/rentals', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized - No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let decodedToken;
+    
+    try {
+      decodedToken = await admin.auth().verifyIdToken(token);
+    } catch (error) {
+      console.error('Error verifying token:', error);
+      return res.status(401).json({ error: 'Unauthorized - Invalid token' });
+    }
+    
+    const userId = decodedToken.uid;
+    console.log(`Fetching rentals for user: ${userId}`);
+    
+    const snapshot = await db.collection('rentals')
+      .where('userId', '==', userId)
+      .get();
+      
+    const rentals = [];
+    snapshot.forEach(doc => {
+      const data = serializeDocumentData(doc.data());
+      rentals.push({
+        id: doc.id,
+        ...data
+      });
+    });
+    
+    res.json({ data: rentals });
+  } catch (error) {
+    console.error('Error fetching rentals:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch rentals',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/rentals - Create a new rental
+apiRouter.post('/rentals', async (req, res) => {
   try {
     const { equipmentId, startDate, endDate, quantity, name, price } = req.body;
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Необхідна авторизація' });
+      return res.status(401).json({ error: 'Unauthorized - No token provided' });
     }
     
     const token = authHeader.split(' ')[1];
@@ -218,64 +350,63 @@ app.post('/api/rentals', async (req, res) => {
     try {
       decodedToken = await admin.auth().verifyIdToken(token);
     } catch (error) {
-      console.error('Помилка перевірки токена:', error);
-      return res.status(401).json({ error: 'Недійсний токен' });
+      console.error('Error verifying token:', error);
+      return res.status(401).json({ error: 'Unauthorized - Invalid token' });
     }
     
     const userId = decodedToken.uid;
     
-    // Перевірка наявності всіх необхідних даних
+    // Validate required fields
     if (!equipmentId || !startDate || !endDate || !quantity || !name || price === undefined) {
       return res.status(400).json({ 
-        error: 'Відсутні обов\'язкові поля',
+        error: 'Missing required fields',
         required: ['equipmentId', 'startDate', 'endDate', 'quantity', 'name', 'price']
       });
     }
     
-    // Перевірка дат
+    // Validate dates
     const start = new Date(startDate);
     const end = new Date(endDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
     if (start < today) {
-      return res.status(400).json({ error: 'Дата початку не може бути в минулому' });
+      return res.status(400).json({ error: 'Start date cannot be in the past' });
     }
     
     if (end <= start) {
-      return res.status(400).json({ error: 'Дата закінчення повинна бути після дати початку' });
+      return res.status(400).json({ error: 'End date must be after start date' });
     }
     
-    // Перевірка кількості
+    // Validate quantity
     if (quantity <= 0) {
-      return res.status(400).json({ error: 'Кількість повинна бути більше 0' });
+      return res.status(400).json({ error: 'Quantity must be greater than 0' });
     }
     
-    // Перевірка наявності обладнання
+    // Validate equipment availability
     const equipmentRef = db.collection('equipment').doc(equipmentId);
     const equipmentDoc = await equipmentRef.get();
     
     if (!equipmentDoc.exists) {
-      return res.status(404).json({ error: 'Обладнання не знайдено' });
+      return res.status(404).json({ error: 'Equipment not found' });
     }
     
     const equipmentData = equipmentDoc.data();
     
-    // Перевірка наявної кількості
     if (equipmentData.stock < quantity) {
       return res.status(400).json({ 
-        error: 'Недостатня кількість на складі',
+        error: 'Insufficient quantity available',
         available: equipmentData.stock,
         requested: quantity
       });
     }
     
-    // Оновлення кількості на складі
+    // Update equipment stock
     await equipmentRef.update({
       stock: admin.firestore.FieldValue.increment(-quantity)
     });
     
-    // Створення оренди
+    // Create rental
     const rentalData = {
       userId,
       equipmentId,
@@ -309,22 +440,22 @@ app.post('/api/rentals', async (req, res) => {
     res.status(201).json(responseData);
     
   } catch (error) {
-    console.error('Помилка при створенні оренди:', error);
+    console.error('Error creating rental:', error);
     res.status(500).json({ 
-      error: 'Не вдалося створити оренду',
+      error: 'Failed to create rental',
       details: error.message 
     });
   }
 });
 
-// DELETE /api/rentals/:id - Видалити оренду
-app.delete('/api/rentals/:id', async (req, res) => {
+// DELETE /api/rentals/:id - Delete a rental
+apiRouter.delete('/rentals/:id', async (req, res) => {
   try {
     const rentalId = req.params.id;
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Необхідна авторизація' });
+      return res.status(401).json({ error: 'Unauthorized - No token provided' });
     }
     
     const token = authHeader.split(' ')[1];
@@ -333,26 +464,26 @@ app.delete('/api/rentals/:id', async (req, res) => {
     try {
       decodedToken = await admin.auth().verifyIdToken(token);
     } catch (error) {
-      console.error('Помилка перевірки токена:', error);
-      return res.status(401).json({ error: 'Недійсний токен' });
+      console.error('Error verifying token:', error);
+      return res.status(401).json({ error: 'Unauthorized - Invalid token' });
     }
     
     const userId = decodedToken.uid;
     
-    // Перевірити, чи належить оренда користувачу
+    // Validate rental ownership
     const rentalDoc = await db.collection('rentals').doc(rentalId).get();
     
     if (!rentalDoc.exists) {
-      return res.status(404).json({ error: 'Оренду не знайдено' });
+      return res.status(404).json({ error: 'Rental not found' });
     }
     
     const rentalData = rentalDoc.data();
     
     if (rentalData.userId !== userId) {
-      return res.status(403).json({ error: 'Немає прав для видалення цієї оренди' });
+      return res.status(403).json({ error: 'Unauthorized to delete this rental' });
     }
     
-    // Повернути кількість на склад
+    // Return equipment stock
     if (rentalData.equipmentId && rentalData.quantity) {
       const equipmentRef = db.collection('equipment').doc(rentalData.equipmentId);
       await equipmentRef.update({
@@ -360,22 +491,20 @@ app.delete('/api/rentals/:id', async (req, res) => {
       });
     }
     
-    // Видалити оренду
+    // Delete rental
     await db.collection('rentals').doc(rentalId).delete();
     
-    res.status(200).json({ message: 'Оренду видалено' });
+    res.status(200).json({ message: 'Rental deleted' });
   } catch (error) {
-    console.error('Помилка при видаленні оренди:', error);
+    console.error('Error deleting rental:', error);
     res.status(500).json({ 
-      error: 'Не вдалося видалити оренду',
-      details: error.message 
+      error: 'Failed to delete rental',
+      details: error.message
     });
   }
 });
 
-// Legacy routes for backward compatibility (removed duplicates)
-
-// GET /rentals - Redirect to API route
+// Redirect legacy routes to API routes
 app.get('/rentals', (req, res) => {
   res.redirect('/api/rentals');
 });
@@ -385,7 +514,7 @@ app.post('/rentals', (req, res) => {
   res.redirect(307, '/api/rentals'); // 307 preserves the POST method
 });
 
-// API Routes must come before static files
+// Health check endpoint (legacy route - will be removed in future versions)
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -409,27 +538,64 @@ const printRoutes = (router) => {
   });
 };
 
+// Log all registered routes
+console.log('\n=== Registered Routes ===');
+printRoutes(app);
+console.log('=========================\n');
+
+// Log all registered routes after cleanup
+console.log('\n=== Final Registered Routes ===');
+printRoutes(app);
+console.log('===============================\n');
+
 // Serve static files from the dist directory
-console.log('Setting up static file serving from:', path.join(__dirname, 'dist'));
-app.use(express.static(path.join(__dirname, 'dist'), {
+const staticDir = path.join(__dirname, 'dist');
+console.log('Setting up static file serving from:', staticDir);
+
+// Check if dist directory exists
+if (!fs.existsSync(staticDir)) {
+  console.error('ERROR: dist directory does not exist!');
+  console.error('Please run `npm run build` to build the frontend');
+} else {
+  console.log('Dist directory contents:', fs.readdirSync(staticDir));
+}
+
+// Serve static files with proper caching headers
+app.use(express.static(staticDir, {
   setHeaders: (res, filePath) => {
     // Set proper MIME type for JavaScript files
     if (filePath.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript');
     }
+    // Disable caching for API requests
+    if (filePath.includes('api/')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
   },
   fallthrough: true
 }));
 
-// Print all registered routes
-console.log('\n=== Registered Routes ===');
-printRoutes(app);
-console.log('=========================\n');
+// Log all requests for debugging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// API error handler
+app.use('/api/*', (req, res, next) => {
+  res.status(404).json({ 
+    error: 'API endpoint not found',
+    path: req.originalUrl,
+    method: req.method
+  });
+});
 
 // Handle SPA routing - serve index.html for all other routes
 app.get('*', (req, res) => {
-  console.log(`Serving index.html for route: ${req.originalUrl}`);
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  console.log(`Serving index.html for SPA route: ${req.originalUrl}`);
+  res.sendFile(path.join(staticDir, 'index.html'));
 });
 
 // Error handling middleware
