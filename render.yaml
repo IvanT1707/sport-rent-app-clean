@@ -1,0 +1,42 @@
+# Файл конфігурації для автоматичного деплою на Render
+# Документація: https://render.com/docs/deploy-render-yaml
+
+services:
+  - type: web
+    name: sport-rent-app
+    env: node
+    region: frankfurt  # Або інший бажаний регіон
+    buildCommand: npm install && npm run build
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: FIREBASE_SERVICE_ACCOUNT
+        fromService:
+          name: sport-rent-app
+          type: env
+          property: FIREBASE_SERVICE_ACCOUNT
+      - key: FIREBASE_DATABASE_URL
+        value: https://sportrent-a81c9-default-rtdb.europe-west1.firebasedatabase.app
+      - key: NODE_ENV
+        value: production
+    plan: free  # Або professional для продакшн навантаження
+    autoDeploy: true  # Автоматичний деплой при пушах у гілку
+    
+    # Налаштування для статичних файлів
+    staticPublishPath: ./dist
+    
+    # Налаштування здоров'я
+    healthCheckPath: /api/health
+    healthCheckTimeout: 10
+    healthCheckInterval: 60
+    
+    # Налаштування масштабування
+    numInstances: 1
+    instanceSize: free  # 512MB RAM, спільний CPU
+    
+    # Додаткові налаштування
+    ignoreCache: false
+    skipCache: false
