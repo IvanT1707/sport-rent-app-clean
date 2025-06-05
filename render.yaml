@@ -5,11 +5,9 @@ services:
   - type: web
     name: sport-rent-app
     env: node
-    region: frankfurt
-    buildCommand: |
-      npm install
-      npm run build
-    startCommand: npm run start
+    region: frankfurt  # Або інший бажаний регіон
+    buildCommand: npm install && npm run build
+    startCommand: node server.js
     envVars:
       - key: NODE_ENV
         value: production

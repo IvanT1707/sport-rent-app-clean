@@ -606,38 +606,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// In production, serve static files from the dist directory
-if (process.env.NODE_ENV === 'production') {
-  // Serve static files from the dist directory
-  app.use(express.static(path.join(__dirname, 'dist'), {
-    setHeaders: (res, filePath) => {
-      // Set proper MIME types for JavaScript files
-      if (filePath.endsWith('.js')) {
-        res.setHeader('Content-Type', 'application/javascript');
-      }
-      // Add security headers
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('X-Frame-Options', 'DENY');
-      res.setHeader('X-XSS-Protection', '1; mode=block');
-      res.setHeader('Referrer-Policy', 'same-origin');
-    }
-  }));
-
-  // Handle SPA routing - return index.html for all non-API routes
-  app.get('*', (req, res, next) => {
-    if (!req.path.startsWith('/api/')) {
-      return res.sendFile(path.join(__dirname, 'dist', 'index.html'), {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      });
-    }
-    next();
-  });
-}
-
 // API error handler
 app.use('/api/*', (req, res, next) => {
   res.status(404).json({ 
@@ -673,17 +641,18 @@ try {
 
 // Start the server
 const PORT = process.env.PORT || 3000;
-
-// Only start the server if this file is run directly (not when imported as a module)
-if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`API Base URL: ${process.env.API_BASE_URL || 'Not set'}`);
-  });
-}
-
-export { app }; // For testing
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n=== Server Started ===`);
+  console.log(`Server running on port: ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Node version: ${process.version}`);
+  console.log(`Platform: ${process.platform} ${process.arch}`);
+  console.log(`Memory usage: ${JSON.stringify(process.memoryUsage())}`);
+  console.log(`Current directory: ${__dirname}`);
+  console.log(`Server time: ${new Date().toISOString()}`);
+  console.log(`Access the app at: http://localhost:${PORT}`);
+  console.log('Waiting for requests...\n');
+});
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
