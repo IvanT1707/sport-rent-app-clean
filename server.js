@@ -561,6 +561,33 @@ const printRoutes = (router) => {
   });
 };
 
+// API Routes
+apiRouter.get('/equipment', async (req, res) => {
+  try {
+    console.log('GET /api/equipment called');
+    
+    // Get all equipment from Firestore
+    const equipmentSnapshot = await db.collection('equipment').get();
+    const equipmentList = [];
+    
+    equipmentSnapshot.forEach(doc => {
+      equipmentList.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    console.log(`Fetched ${equipmentList.length} equipment items from Firestore`);
+    res.json(equipmentList);
+  } catch (error) {
+    console.error('Error in /api/equipment:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch equipment',
+      details: error.message 
+    });
+  }
+});
+
 // Log all registered routes
 console.log('\n=== Registered Routes ===');
 printRoutes(app);
