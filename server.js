@@ -23,25 +23,35 @@ dotenv.config();
 // Initialize Firebase Admin
 let serviceAccount;
 
-try {
-  // Спершу пробуємо прочитати з файлу
-  serviceAccount = require('./serviceAccountKey.json');
-  console.log('Using service account from file');
-} catch (error) {
-  // Якщо файлу немає, перевіряємо змінні середовища
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+// Try to get service account from environment variable first
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
     serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     console.log('Using service account from environment variable');
-  } else {
+  } catch (error) {
+    console.error('Error parsing FIREBASE_SERVICE_ACCOUNT:', error);
+    process.exit(1);
+  }
+} else {
+  // Fallback to service account file (for local development)
+  try {
+    serviceAccount = require('./serviceAccountKey.json');
+    console.log('Using service account from file');
+  } catch (error) {
     console.error('FATAL: No Firebase service account found');
+    console.error('Please set FIREBASE_SERVICE_ACCOUNT environment variable or provide serviceAccountKey.json');
     process.exit(1);
   }
 }
 
+// Initialize Firebase Admin
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://sportrent-a81c9-default-rtdb.europe-west1.firebasedatabase.app'
+  databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://sportrent-a81c9-default-rtdb.europe-west1.firebasedatabase.app',
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'sportrent-a81c9.appspot.com'
 });
+
+console.log('Firebase Admin initialized with project ID:', serviceAccount.project_id);
 
 console.log('Firebase Admin initialized successfully');
 
@@ -127,13 +137,9 @@ const serializeDocumentData = (data) => {
   return serialized;
 };
 
-// API Router
+// Create API router
 const apiRouter = express.Router();
 console.log('Initialized API router');
-
-// Mount the API router at /api
-app.use('/api', apiRouter);
-console.log('Mounted API router at /api');
 
 // Simple test endpoint
 apiRouter.get('/test', (req, res) => {
@@ -157,15 +163,30 @@ apiRouter.get('/health', (req, res) => {
   });
 });
 
+// Mount the API router at /api
+app.use('/api', apiRouter);
+console.log('Mounted API router at /api');
+
+
+
 // GET /api/equipment - Get all equipment
 apiRouter.get('/equipment', async (req, res) => {
   try {
     console.log('Fetching equipment from Firestore...');
+    
+    // Log request headers for debugging
+    console.log('Request headers:', req.headers);
+    console.log('Request URL:', req.originalUrl);
+    
     const snapshot = await db.collection('equipment').get();
     
     if (snapshot.empty) {
       console.log('No equipment found in the database');
-      return res.json({ data: [] });
+      return res.status(200).json({ 
+        success: true, 
+        data: [],
+        message: 'No equipment found'
+      });
     }
 
     const equipment = [];
@@ -179,12 +200,18 @@ apiRouter.get('/equipment', async (req, res) => {
     });
     
     console.log(`Returning ${equipment.length} equipment items`);
-    res.json({ data: equipment });
+    res.status(200).json({ 
+      success: true, 
+      data: equipment,
+      count: equipment.length
+    });
   } catch (error) {
     console.error('Error fetching equipment:', error);
     res.status(500).json({ 
+      success: false,
       error: 'Failed to fetch equipment',
-      details: error.message 
+      message: error.message,
+      code: error.code || 'EQUIPMENT_FETCH_ERROR'
     });
   }
 });
@@ -579,6 +606,38 @@ app.use((req, res, next) => {
   next();
 });
 
+// In production, serve static files from the dist directory
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from the dist directory
+  app.use(express.static(path.join(__dirname, 'dist'), {
+    setHeaders: (res, filePath) => {
+      // Set proper MIME types for JavaScript files
+      if (filePath.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript');
+      }
+      // Add security headers
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+      res.setHeader('Referrer-Policy', 'same-origin');
+    }
+  }));
+
+  // Handle SPA routing - return index.html for all non-API routes
+  app.get('*', (req, res, next) => {
+    if (!req.path.startsWith('/api/')) {
+      return res.sendFile(path.join(__dirname, 'dist', 'index.html'), {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+    }
+    next();
+  });
+}
+
 // API error handler
 app.use('/api/*', (req, res, next) => {
   res.status(404).json({ 
@@ -614,18 +673,17 @@ try {
 
 // Start the server
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n=== Server Started ===`);
-  console.log(`Server running on port: ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Node version: ${process.version}`);
-  console.log(`Platform: ${process.platform} ${process.arch}`);
-  console.log(`Memory usage: ${JSON.stringify(process.memoryUsage())}`);
-  console.log(`Current directory: ${__dirname}`);
-  console.log(`Server time: ${new Date().toISOString()}`);
-  console.log(`Access the app at: http://localhost:${PORT}`);
-  console.log('Waiting for requests...\n');
-});
+
+// Only start the server if this file is run directly (not when imported as a module)
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`API Base URL: ${process.env.API_BASE_URL || 'Not set'}`);
+  });
+}
+
+export { app }; // For testing
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
