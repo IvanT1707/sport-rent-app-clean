@@ -2,15 +2,15 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Firebase configuration from environment variables
+// Firebase configuration
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyANoBBSM3UAxMY0kFzSGAB_luJCXPeyXvE",
+  authDomain: "sportrent-a81c9.firebaseapp.com",
+  projectId: "sportrent-a81c9",
+  storageBucket: "sportrent-a81c9.firebasestorage.app",
+  messagingSenderId: "1084389173107",
+  appId: "1:1084389173107:web:0b6247178e55e358c00706",
+  measurementId: "G-XLHTRTQB3Y"
 };
 
 // Log Firebase config for debugging (remove in production)
